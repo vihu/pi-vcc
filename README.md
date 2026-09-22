@@ -157,7 +157,8 @@ Config lives at `~/.pi/agent/pi-vcc-config.json` (auto-scaffolded on first load 
   "continueAfterThresholdCompact": true,
   "debug": false,
   "skipForProviders": [],
-  "skipCustomTypes": []
+  "skipCustomTypes": [],
+  "localModel": { "enabled": false, "url": "http://localhost:8000", "profile": "von", "timeoutMs": 4000 }
 }
 ```
 
@@ -167,6 +168,7 @@ Config lives at `~/.pi/agent/pi-vcc-config.json` (auto-scaffolded on first load 
 - **`debug`** *(default `false`)*: when `true`, each compaction writes detailed info to `/tmp/pi-vcc-debug.json` — message counts, cut boundary, summary preview, sections, token estimate calibration.
 - **`skipForProviders`** *(default `[]`)*: providers pi-vcc defers compaction for, so a provider-specific compaction extension (e.g. remote compaction for OpenAI/Grok models) can take over instead. Matched exactly and case-insensitively against Pi's provider id — check `/model` for the actual id (Grok is `xai`, not `grok`). The check runs per compaction, so switching models mid-session works. Explicit `/pi-vcc` always bypasses the skip.
 - **`skipCustomTypes`** *(default `[]`)*: list of `customType` values whose `custom_message` entries are excluded from the summarizer input. Some extensions inject per-turn boilerplate via `custom_message` (e.g. skill cards, guidance blocks) that gets regenerated every turn — summarizing it wastes tokens and pollutes the summary. Match is exact and case-sensitive on `customType`; find an extension's value in your session file (`"type":"custom_message"` entries). Only the summary input is filtered: cut selection, token calibration, and kept-tail counting are unaffected. Extensions that inject ephemeral per-turn content should carry a stable `customType` so compactors can exclude them.
+- **`localModel`** *(default `{ enabled: false, url: "http://localhost:8000", profile: "von", timeoutMs: 4000 }`)*: opt-in semantic retrieval for `vcc_recall` keyword searches with a local System One decision model, [Von](https://github.com/wfzyx/von) or [Laya](https://github.com/NandhaKishorM/laya) (both Apache 2.0; nothing leaves the machine). Run `scripts/von-server.py` or `scripts/laya-server.py` (each file's docstring has the three setup lines), then set `enabled: true`, `url` to the server and `profile` to `"von"` or `"laya"`. Every entry in scope is scored for relevance to the query and merged with the BM25 hits by reciprocal rank fusion, so entries BM25 misses on wording become reachable without demoting what it found. Only user- and assistant-authored text is sent, never tool results or bash output. Regex queries are untouched. Any error or timeout returns the BM25 order; a timeout or 5xx pauses the model for a minute. On a 37-query bench from real sessions the right entry lands on page 1 for 68% of searches versus 51% with BM25 alone, at about 1.3 s per search on a Radeon 8060S.
 
 ## Benchmarks
 

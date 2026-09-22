@@ -60,6 +60,15 @@ export interface PiVccSettings {
    * counting are all unaffected.
    */
   skipCustomTypes: string[];
+  /**
+   * Semantic retrieval for vcc_recall with a local System One decision
+   * server (scripts/von-server.py or scripts/laya-server.py). Opt-in
+   * (default off); `url` is the server, `profile` the request shape for the
+   * model behind it. Only user- and assistant-authored text is sent, never
+   * tool or bash output. Any error or timeout falls back to the BM25 order;
+   * a timeout or 5xx pauses the model for a minute.
+   */
+  localModel: { enabled: boolean; url: string; profile: "von" | "laya"; timeoutMs: number };
 }
 
 export const DEFAULT_SETTINGS: PiVccSettings = {
@@ -69,6 +78,7 @@ export const DEFAULT_SETTINGS: PiVccSettings = {
   debug: false,
   skipForProviders: [],
   skipCustomTypes: [],
+  localModel: { enabled: false, url: "http://localhost:8000", profile: "von", timeoutMs: 4000 },
 };
 
 const readJson = (path: string): Record<string, unknown> | null => {
@@ -83,6 +93,18 @@ const readJson = (path: string): Record<string, unknown> | null => {
 const coerceStringArray = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 
+/** Coerce the localModel block, failing closed to disabled / defaults. */
+const coerceLocalModel = (v: unknown): PiVccSettings["localModel"] => {
+  const o = (v && typeof v === "object" ? v : {}) as Record<string, unknown>;
+  const d = DEFAULT_SETTINGS.localModel;
+  return {
+    enabled: o.enabled === true,
+    url: typeof o.url === "string" && /^https?:\/\//.test(o.url) ? o.url : d.url,
+    profile: o.profile === "laya" ? "laya" : "von",
+    timeoutMs: typeof o.timeoutMs === "number" && o.timeoutMs > 0 ? o.timeoutMs : d.timeoutMs,
+  };
+};
+
 export function loadSettings(): PiVccSettings {
   const parsed = readJson(settingsPath());
   if (!parsed || typeof parsed !== "object") return { ...DEFAULT_SETTINGS };
@@ -91,6 +113,7 @@ export function loadSettings(): PiVccSettings {
   // where .includes becomes substring matching) into the provider check.
   merged.skipForProviders = coerceStringArray(parsed.skipForProviders);
   merged.skipCustomTypes = coerceStringArray(parsed.skipCustomTypes);
+  merged.localModel = coerceLocalModel(parsed.localModel);
   return merged;
 }
 

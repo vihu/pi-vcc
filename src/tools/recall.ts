@@ -6,6 +6,9 @@ import { formatRecallOutput, formatTouchedOutput } from "../core/format-recall";
 import { getActiveLineageEntryIds } from "../core/lineage";
 import { normalizeRecallScope, normalizeRecallMode } from "../core/recall-scope";
 import { parseDrillDown, expandEntryFile } from "../core/drill-down";
+import { loadSettings } from "../core/settings";
+import { askModel } from "../core/decision-model";
+import { retrieveAndRank, PROFILES } from "../core/rerank";
 
 const DEFAULT_RECENT = 25;
 const PAGE_SIZE = 5;
@@ -53,7 +56,7 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
         ], { description: "What to show. hybrid (default) = normal search; touched = aggregated files-by-path with entry indices." }),
       ),
     }),
-    async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
+    async execute(_toolCallId, params, signal, _onUpdate, ctx) {
       const sessionFile = ctx.sessionManager.getSessionFile();
       if (!sessionFile) {
         return {
@@ -136,7 +139,16 @@ export const registerRecallTool = (pi: ExtensionAPI) => {
       const { rendered: msgs, rawMessages } = loadAllMessages(sessionFile, false, lineageEntryIds);
 
       if (params.query?.trim()) {
-        const { hits, totalBeforeCap, truncated } = searchEntriesDetailed(msgs, rawMessages, params.query);
+        const result = searchEntriesDetailed(msgs, rawMessages, params.query);
+        const { totalBeforeCap, truncated } = result;
+        // Opt-in local-model retrieval (src/core/rerank.ts): every entry is
+        // scored for relevance and the union with the BM25 hits is ordered by
+        // rank fusion, so entries BM25 misses on wording become reachable.
+        // The regex path stays chronological.
+        const lm = loadSettings().localModel;
+        const hits = lm.enabled && result.scored
+          ? await retrieveAndRank(params.query, msgs, result.hits, askModel, { url: lm.url, signal, timeoutMs: lm.timeoutMs, ...PROFILES[lm.profile] })
+          : result.hits;
         const page = Math.max(1, params.page ?? 1);
         // Single source of truth for page count: hits.length, the same array
         // that's actually paginated below (already floor-filtered and capped).

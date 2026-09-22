@@ -21,6 +21,9 @@ export interface SearchResult {
   totalBeforeCap: number;
   /** True when the hard cap discarded matches (`totalBeforeCap > hits.length`). */
   truncated: boolean;
+  /** True when `hits` carry a BM25 relevance order (natural-language path).
+   *  False for the browse and regex paths, which are chronological. */
+  scored: boolean;
 }
 /** A file touched in one entry — used by mode:touched aggregation. */
 export interface FileTouch {
@@ -427,7 +430,7 @@ const BM25_RELATIVE_FLOOR = 0.2;
  * changes in both runs; top-5 changed in 5/161 (3%) and 5/222 (2%); median
  * result count 32→18 and 29.5→20; p90 119→50 and 115.9→50.
  */
-const SEARCH_RESULT_CAP = 50;
+export const SEARCH_RESULT_CAP = 50;
 
 /**
  * Tuning overrides for `searchEntriesDetailed`. Exists only so the offline
@@ -467,10 +470,10 @@ const applyRelativeFloor = (
  * changing which matches a truncated regex search keeps (e.g. newest-first)
  * is a separate decision, out of scope here.
  */
-const capHits = (hits: SearchHit[], cap: number): SearchResult => {
+const capHits = (hits: SearchHit[], cap: number, scored: boolean): SearchResult => {
   const totalBeforeCap = hits.length;
   const capped = totalBeforeCap > cap ? hits.slice(0, cap) : hits;
-  return { hits: capped, totalBeforeCap, truncated: capped.length < totalBeforeCap };
+  return { hits: capped, totalBeforeCap, truncated: capped.length < totalBeforeCap, scored };
 };
 
 /**
@@ -484,7 +487,7 @@ export const searchEntriesDetailed = (
   query?: string,
   tuning?: SearchTuning,
 ): SearchResult => {
-  if (!query?.trim()) return { hits: entries, totalBeforeCap: entries.length, truncated: false };
+  if (!query?.trim()) return { hits: entries, totalBeforeCap: entries.length, truncated: false, scored: false };
 
   const relativeFloor = tuning?.relativeFloor ?? BM25_RELATIVE_FLOOR;
   const cap = tuning?.cap ?? SEARCH_RESULT_CAP;
@@ -517,7 +520,7 @@ export const searchEntriesDetailed = (
         hits.push({ ...e, snippet: snip, matchCount: 1 });
       }
     }
-    if (hits.length > 0) return capHits(hits, cap);
+    if (hits.length > 0) return capHits(hits, cap, false);
   }
 
   // Natural language / multi-word query: BM25 scoring
@@ -565,7 +568,7 @@ export const searchEntriesDetailed = (
   // scoring above, which already matches case-insensitively.
   const effectiveTermCount = new Set(terms.map((t) => t.toLowerCase())).size;
   const floored = effectiveTermCount >= 2 ? applyRelativeFloor(scored, relativeFloor) : scored;
-  return capHits(floored.map((s) => s.hit), cap);
+  return capHits(floored.map((s) => s.hit), cap, true);
 };
 
 export const searchEntries = (

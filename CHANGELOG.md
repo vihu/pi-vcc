@@ -2,6 +2,12 @@
 
 All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
+## [Unreleased]
+
+### Features
+
+- **`localModel` setting — opt-in semantic retrieval for `vcc_recall` with a local decision model.** A System One model running on this machine (Von via `scripts/von-server.py`, or Laya via `scripts/laya-server.py`) answers three narrow relevance questions per in-scope entry, and the result is merged with the BM25 hits by reciprocal rank fusion, so entries BM25 misses on wording become reachable without demoting what it found. Off by default, so the default install still makes no network calls; when on, the only traffic is to the configured `url`. Sends user- and assistant-authored text only, never tool results or bash output. Every failure path returns the BM25 order unchanged; a timeout or 5xx pauses the model for a minute. The Von server script batches every question of a request and resolves fan-out references, which `von serve` does not. On 37 self-supervised queries from real sessions: MRR 0.52 (Von and Laya) vs 0.32 for BM25 alone, 23 queries improved and 1 to 2 worse (fork-local `.ai-docs/PLAN-001`).
+
 ## [0.8.0]
 
 ### Features
