@@ -66,7 +66,10 @@ export interface PiVccSettings {
    * (default off); `url` is the server, `profile` the request shape for the
    * model behind it. Only user- and assistant-authored text is sent, never
    * tool or bash output. Any error or timeout falls back to the BM25 order;
-   * a timeout or 5xx pauses the model for a minute.
+   * a timeout or 5xx pauses the model for a minute. `timeoutMs` is per
+   * request; a local server answers requests one at a time, so on a long
+   * session the queued requests of one search need seconds, not the sub-
+   * second a cloud endpoint would.
    */
   localModel: { enabled: boolean; url: string; profile: "von" | "laya"; timeoutMs: number };
 }
@@ -78,7 +81,7 @@ export const DEFAULT_SETTINGS: PiVccSettings = {
   debug: false,
   skipForProviders: [],
   skipCustomTypes: [],
-  localModel: { enabled: false, url: "http://localhost:8000", profile: "von", timeoutMs: 4000 },
+  localModel: { enabled: false, url: "http://localhost:8000", profile: "von", timeoutMs: 20000 },
 };
 
 const readJson = (path: string): Record<string, unknown> | null => {
